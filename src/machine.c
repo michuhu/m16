@@ -3,7 +3,7 @@
 #include <assert.h>
 #include <stddef.h>
 
-void m16_machine_init(M16Machine *machine) 
+void m16_machine_power_on(M16Machine *machine)
 {
     assert(machine != NULL);
 
@@ -13,7 +13,14 @@ void m16_machine_init(M16Machine *machine)
 
 void m16_machine_reset(M16Machine *machine)
 {
-    assert (machine != NULL);
+    assert(machine != NULL);
 
     m16_cpu_reset(&machine->cpu);
+}
+
+M16StepResult m16_machine_step(M16Machine *machine)
+{
+    assert(machine != NULL);
+
+    return m16_cpu_step(&machine->cpu, &machine->bus);
 }

@@ -6,63 +6,62 @@
 #include <string.h>
 
 #include "m16/machine.h"
+#include "m16/instruction.h"
 
 static bool current_test_failed = false;
 static unsigned tests_run = 0;
 static unsigned tests_failed = 0;
 
-#define FAIL(...)                                      \
-    do {                                               \
-        fprintf(                                       \
-            stderr,                                    \
-            "\n  %s:%d: ",                             \
-            __FILE__,                                  \
-            __LINE__                                   \
-        );                                             \
-        fprintf(stderr, __VA_ARGS__);                  \
-        fputc('\n', stderr);                            \
-        current_test_failed = true;                    \
+#define FAIL(...)                                                                                  \
+    do {                                                                                           \
+        fprintf(stderr, "\n  %s:%d: ", __FILE__, __LINE__);                                        \
+        fprintf(stderr, __VA_ARGS__);                                                              \
+        fputc('\n', stderr);                                                                       \
+        current_test_failed = true;                                                                \
     } while (0)
 
-#define CHECK_EQ_U16(expected, actual)                  \
-    do {                                               \
-        const uint16_t expected_value =                \
-            (uint16_t)(expected);                      \
-        const uint16_t actual_value =                  \
-            (uint16_t)(actual);                        \
-                                                       \
-        if (expected_value != actual_value) {          \
-            FAIL(                                      \
-                "expected 0x%04" PRIx16                \
-                ", got 0x%04" PRIx16,                  \
-                expected_value,                        \
-                actual_value                           \
-            );                                         \
-        }                                              \
+#define CHECK_EQ_U16(expected, actual)                                                             \
+    do {                                                                                           \
+        const uint16_t expected_value = (uint16_t)(expected);                                      \
+        const uint16_t actual_value = (uint16_t)(actual);                                          \
+                                                                                                   \
+        if (expected_value != actual_value) {                                                      \
+            FAIL("expected 0x%04" PRIx16 ", got 0x%04" PRIx16, expected_value, actual_value);      \
+        }                                                                                          \
     } while (0)
 
-#define CHECK_EQ_U64(expected, actual)                  \
-    do {                                               \
-        const uint64_t expected_value =                \
-            (uint64_t)(expected);                      \
-        const uint64_t actual_value =                  \
-            (uint64_t)(actual);                        \
-                                                       \
-        if (expected_value != actual_value) {          \
-            FAIL(                                      \
-                "expected %" PRIu64                    \
-                ", got %" PRIu64,                      \
-                expected_value,                        \
-                actual_value                           \
-            );                                         \
-        }                                              \
+#define CHECK_EQ_U64(expected, actual)                                                             \
+    do {                                                                                           \
+        const uint64_t expected_value = (uint64_t)(expected);                                      \
+        const uint64_t actual_value = (uint64_t)(actual);                                          \
+                                                                                                   \
+        if (expected_value != actual_value) {                                                      \
+            FAIL("expected %" PRIu64 ", got %" PRIu64, expected_value, actual_value);              \
+        }                                                                                          \
     } while (0)
 
-#define CHECK_FALSE(value)                             \
-    do {                                               \
-        if ((value)) {                                 \
-            FAIL("expected false, got true");          \
-        }                                              \
+#define CHECK_FALSE(value)                                                                         \
+    do {                                                                                           \
+        if ((value)) {                                                                             \
+            FAIL("expected false, got true");                                                      \
+        }                                                                                          \
+    } while (0)
+
+#define CHECK_EQ_INT(expected, actual)                                                             \
+    do {                                                                                           \
+        const int expected_value = (int)(expected);                                                \
+        const int actual_value = (int)(actual);                                                    \
+                                                                                                   \
+        if (expected_value != actual_value) {                                                      \
+            FAIL("expected %d, got %d", expected_value, actual_value);                             \
+        }                                                                                          \
+    } while (0)
+
+#define CHECK_TRUE(value)                                                                          \
+    do {                                                                                           \
+        if (!(value)) {                                                                            \
+            FAIL("expected true, got false");                                                      \
+        }                                                                                          \
     } while (0)
 
 static void test_init_initializes_machine(void)
@@ -76,7 +75,7 @@ static void test_init_initializes_machine(void)
      */
     memset(&machine, 0xA5, sizeof(machine));
 
-    m16_machine_init(&machine);
+    m16_machine_power_on(&machine);
 
     for (size_t i = 0; i < M16_REGISTER_COUNT; ++i) {
         CHECK_EQ_U16(0, machine.cpu.r[i]);
@@ -95,22 +94,11 @@ static void test_init_initializes_machine(void)
      * zawinąłby się do 0 i pętla nigdy by się nie
      * zakończyła.
      */
-    for (
-        uint32_t address = 0;
-        address < M16_ADDRESS_SPACE_WORDS;
-        ++address
-    ) {
-        const m16_word_t value = m16_bus_read(
-            &machine.bus,
-            (m16_addr_t)address
-        );
+    for (uint32_t address = 0; address < M16_ADDRESS_SPACE_WORDS; ++address) {
+        const m16_word_t value = m16_bus_read(&machine.bus, (m16_addr_t)address);
 
         if (value != 0) {
-            FAIL(
-                "memory at 0x%04" PRIx32
-                " was not cleared",
-                address
-            );
+            FAIL("memory at 0x%04" PRIx32 " was not cleared", address);
             break;
         }
     }
@@ -120,13 +108,9 @@ static void test_cpu_reset_preserves_memory(void)
 {
     M16Machine machine;
 
-    m16_machine_init(&machine);
+    m16_machine_power_on(&machine);
 
-    m16_bus_write(
-        &machine.bus,
-        UINT16_C(0x1234),
-        UINT16_C(0xBEEF)
-    );
+    m16_bus_write(&machine.bus, UINT16_C(0x1234), UINT16_C(0xBEEF));
 
     machine.cpu.r[3] = UINT16_C(0xCAFE);
     machine.cpu.pc = UINT16_C(0x1111);
@@ -137,13 +121,7 @@ static void test_cpu_reset_preserves_memory(void)
 
     m16_machine_reset(&machine);
 
-    CHECK_EQ_U16(
-        UINT16_C(0xBEEF),
-        m16_bus_read(
-            &machine.bus,
-            UINT16_C(0x1234)
-        )
-    );
+    CHECK_EQ_U16(UINT16_C(0xBEEF), m16_bus_read(&machine.bus, UINT16_C(0x1234)));
 
     CHECK_EQ_U16(0, machine.cpu.r[3]);
     CHECK_EQ_U16(M16_RESET_ADDRESS, machine.cpu.pc);
@@ -173,27 +151,118 @@ static void test_bus_round_trip_in_ram(void)
         UINT16_C(0xFFFF),
     };
 
-    const size_t count =
-        sizeof(addresses) / sizeof(addresses[0]);
+    const size_t count = sizeof(addresses) / sizeof(addresses[0]);
 
     for (size_t i = 0; i < count; ++i) {
-        m16_bus_write(
-            &bus,
-            addresses[i],
-            values[i]
-        );
+        m16_bus_write(&bus, addresses[i], values[i]);
 
-        CHECK_EQ_U16(
-            values[i],
-            m16_bus_read(&bus, addresses[i])
-        );
+        CHECK_EQ_U16(values[i], m16_bus_read(&bus, addresses[i]));
     }
 }
 
-static void run_test(
-    const char *name,
-    void (*test_function)(void)
-)
+static void test_instruction_encoding(void)
+{
+    const m16_word_t nop = m16_instruction_encode(M16_OPCODE_NOP, 0);
+    const m16_word_t halt = m16_instruction_encode(M16_OPCODE_HALT, 0);
+    const m16_word_t sample = m16_instruction_encode(M16_OPCODE_HALT, UINT8_C(0xA5));
+    CHECK_EQ_U16(UINT16_C(0x0000), nop);
+    CHECK_EQ_U16(UINT16_C(0x0100), halt);
+    CHECK_EQ_U16(UINT16_C(0x01A5), sample);
+    CHECK_EQ_U16(M16_OPCODE_HALT, m16_instruction_opcode(sample));
+    CHECK_EQ_U16(UINT8_C(0xA5), m16_instruction_operand_byte(sample));
+}
+
+static void test_nop_advances_program_counter(void)
+{
+    M16Machine machine;
+    m16_machine_power_on(&machine);
+    machine.cpu.r[0] = UINT16_C(0x1234);
+    machine.cpu.flags = UINT16_C(0x000F);
+    m16_bus_write(&machine.bus, M16_RESET_ADDRESS, m16_instruction_encode(M16_OPCODE_NOP, 0));
+    const M16StepResult result = m16_machine_step(&machine);
+    CHECK_EQ_INT(M16_STEP_OK, result);
+    CHECK_EQ_U16(UINT16_C(0x8001), machine.cpu.pc);
+    CHECK_EQ_U64(1, machine.cpu.cycles);
+    CHECK_FALSE(machine.cpu.halted);
+    CHECK_EQ_U16(UINT16_C(0x1234), machine.cpu.r[0]);
+    CHECK_EQ_U16(UINT16_C(0x000F), machine.cpu.flags);
+}
+
+static void test_halt_stops_cpu(void)
+{
+    M16Machine machine;
+
+    m16_machine_power_on(&machine);
+
+    m16_bus_write(&machine.bus, M16_RESET_ADDRESS, m16_instruction_encode(M16_OPCODE_HALT, 0));
+
+    const M16StepResult first_result = m16_machine_step(&machine);
+
+    CHECK_EQ_INT(M16_STEP_HALTED, first_result);
+
+    CHECK_EQ_U16(UINT16_C(0x8001), machine.cpu.pc);
+
+    CHECK_EQ_U64(1, machine.cpu.cycles);
+
+    CHECK_TRUE(machine.cpu.halted);
+
+    const M16StepResult second_result = m16_machine_step(&machine);
+
+    CHECK_EQ_INT(M16_STEP_HALTED, second_result);
+
+    CHECK_EQ_U16(UINT16_C(0x8001), machine.cpu.pc);
+
+    CHECK_EQ_U64(1, machine.cpu.cycles);
+
+    CHECK_TRUE(machine.cpu.halted);
+}
+
+static void test_program_runs_until_halt(void)
+{
+    M16Machine machine;
+    m16_machine_power_on(&machine);
+    m16_bus_write(&machine.bus, UINT16_C(0x8000), m16_instruction_encode(M16_OPCODE_NOP, 0));
+    m16_bus_write(&machine.bus, UINT16_C(0x8001), m16_instruction_encode(M16_OPCODE_NOP, 0));
+    m16_bus_write(&machine.bus, UINT16_C(0x8002), m16_instruction_encode(M16_OPCODE_HALT, 0));
+    M16StepResult result;
+    do {
+        result = m16_machine_step(&machine);
+    } while (result == M16_STEP_OK);
+    CHECK_EQ_INT(M16_STEP_HALTED, result);
+    CHECK_EQ_U16(UINT16_C(0x8003), machine.cpu.pc);
+    CHECK_EQ_U64(3, machine.cpu.cycles);
+    CHECK_TRUE(machine.cpu.halted);
+}
+
+static void test_illegal_instruction_preserves_cpu_state(void)
+{
+    M16Machine machine;
+    m16_machine_power_on(&machine);
+    m16_bus_write(&machine.bus, M16_RESET_ADDRESS, UINT16_C(0xFF00));
+    machine.cpu.r[2] = UINT16_C(0xCAFE);
+    machine.cpu.flags = UINT16_C(0x0005);
+    const M16StepResult result = m16_machine_step(&machine);
+    CHECK_EQ_INT(M16_STEP_ILLEGAL_INSTRUCTION, result);
+    CHECK_EQ_U16(M16_RESET_ADDRESS, machine.cpu.pc);
+    CHECK_EQ_U64(0, machine.cpu.cycles);
+    CHECK_FALSE(machine.cpu.halted);
+    CHECK_EQ_U16(UINT16_C(0xCAFE), machine.cpu.r[2]);
+    CHECK_EQ_U16(UINT16_C(0x0005), machine.cpu.flags);
+}
+
+static void test_program_counter_wraps_after_ffff(void)
+{
+    M16Machine machine;
+    m16_machine_power_on(&machine);
+    machine.cpu.pc = UINT16_C(0xFFFF);
+    m16_bus_write(&machine.bus, UINT16_C(0xFFFF), m16_instruction_encode(M16_OPCODE_NOP, 0));
+    const M16StepResult result = m16_machine_step(&machine);
+    CHECK_EQ_INT(M16_STEP_OK, result);
+    CHECK_EQ_U16(UINT16_C(0x0000), machine.cpu.pc);
+    CHECK_EQ_U64(1, machine.cpu.cycles);
+}
+
+static void run_test(const char *name, void (*test_function)(void))
 {
     ++tests_run;
     current_test_failed = false;
@@ -213,28 +282,25 @@ static void run_test(
 
 int main(void)
 {
-    run_test(
-        "init initializes machine",
-        test_init_initializes_machine
-    );
+    run_test("init initializes machine", test_init_initializes_machine);
 
-    run_test(
-        "CPU reset preserves memory",
-        test_cpu_reset_preserves_memory
-    );
+    run_test("CPU reset preserves memory", test_cpu_reset_preserves_memory);
 
-    run_test(
-        "bus read/write round trip",
-        test_bus_round_trip_in_ram
-    );
+    run_test("bus read/write round trip", test_bus_round_trip_in_ram);
 
-    printf(
-        "\n%u tests, %u failed\n",
-        tests_run,
-        tests_failed
-    );
+    run_test("instruction encoding", test_instruction_encoding);
 
-    return tests_failed == 0
-        ? EXIT_SUCCESS
-        : EXIT_FAILURE;
+    run_test("NOP advances program counter", test_nop_advances_program_counter);
+
+    run_test("HALT stops CPU", test_halt_stops_cpu);
+
+    run_test("program runs until HALT", test_program_runs_until_halt);
+
+    run_test("illegal instruction preserves state", test_illegal_instruction_preserves_cpu_state);
+
+    run_test("program counter wraps after FFFF", test_program_counter_wraps_after_ffff);
+
+    printf("\n%u tests, %u failed\n", tests_run, tests_failed);
+
+    return tests_failed == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
