@@ -9,15 +9,8 @@ typedef struct {
 
 void m16_bus_init(M16Bus *bus);
 
-m16_word_t m16_bus_read(
-    const M16Bus *bus,
-    m16_addr_t address
-);
+m16_word_t m16_bus_read(const M16Bus *bus, m16_addr_t address);
 
-void m16_bus_write(
-    M16Bus *bus,
-    m16_addr_t address,
-    m16_word_t value
-);
+void m16_bus_write(M16Bus *bus, m16_addr_t address, m16_word_t value);
 
 #endif // M16_BUS_H
