@@ -1,7 +1,8 @@
 CC ?= cc
 
 CPPFLAGS := -Iinclude
-CFLAGS := -std=c17 -Wall -Wextra -Wpedantic -Werror -O0 -g
+# CFLAGS := -std=c17 -Wall -Wextra -Wpedantic -Werror -O0 -g
+CFLAGS := -std=c17 -Wall -Wextra -Wpedantic -Werror -O0 -g -fsanitize=address,undefined
 
 BUILD_DIR := build
 TARGET := $(BUILD_DIR)/test_machine
@@ -23,6 +24,9 @@ $(TARGET): $(CORE_SOURCES) $(TEST_SOURCES)
 
 test: $(TARGET)
 	./$(TARGET)
+
+my:
+	$(CC) $(CPPFLAGS) $(CFLAGS) my-tests.c -o $(BUILD_DIR)/my
 
 clean:
 	rm -rf $(BUILD_DIR)

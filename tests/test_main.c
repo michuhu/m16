@@ -262,6 +262,143 @@ static void test_program_counter_wraps_after_ffff(void)
     CHECK_EQ_U64(1, machine.cpu.cycles);
 }
 
+static void test_register_operand_encoding(void)
+{
+    const uint8_t mov_operand = m16_operand_encode_registers(M16_R5, M16_R2);
+    const uint8_t ldi_operand = m16_operand_encode_destination(M16_R2);
+    CHECK_EQ_U16(UINT8_C(0x52), mov_operand);
+    CHECK_EQ_U16(UINT8_C(0x20), ldi_operand);
+    CHECK_EQ_U16(M16_R5, m16_operand_destination_register(mov_operand));
+    CHECK_EQ_U16(M16_R2, m16_operand_source_register(mov_operand));
+}
+
+static void test_ldi_loads_immediate_value(void)
+{
+    M16Machine machine;
+    m16_machine_power_on(&machine);
+    machine.cpu.r[2] = UINT16_C(0x1111);
+    machine.cpu.flags = UINT16_C(0x000F);
+    m16_bus_write(&machine.bus,
+                  UINT16_C(0x8000),
+                  m16_instruction_encode(M16_OPCODE_LDI, m16_operand_encode_destination(M16_R2)));
+    m16_bus_write(&machine.bus, UINT16_C(0x8001), UINT16_C(0xBEEF));
+    const M16StepResult result = m16_machine_step(&machine);
+    CHECK_EQ_INT(M16_STEP_OK, result);
+    CHECK_EQ_U16(UINT16_C(0xBEEF), machine.cpu.r[2]);
+    CHECK_EQ_U16(UINT16_C(0x8002), machine.cpu.pc);
+    CHECK_EQ_U64(1, machine.cpu.cycles);
+    CHECK_EQ_U16(UINT16_C(0x000F), machine.cpu.flags);
+    CHECK_FALSE(machine.cpu.halted);
+}
+
+static void test_mov_copies_register(void)
+{
+    M16Machine machine;
+    m16_machine_power_on(&machine);
+    machine.cpu.r[2] = UINT16_C(0xBEEF);
+    machine.cpu.r[5] = UINT16_C(0x1111);
+    machine.cpu.flags = UINT16_C(0x000A);
+    m16_bus_write(
+        &machine.bus,
+        M16_RESET_ADDRESS,
+        m16_instruction_encode(M16_OPCODE_MOV, m16_operand_encode_registers(M16_R5, M16_R2)));
+    const M16StepResult result = m16_machine_step(&machine);
+    CHECK_EQ_INT(M16_STEP_OK, result);
+    CHECK_EQ_U16(UINT16_C(0xBEEF), machine.cpu.r[5]);
+    CHECK_EQ_U16(UINT16_C(0xBEEF), machine.cpu.r[2]);
+    CHECK_EQ_U16(UINT16_C(0x8001), machine.cpu.pc);
+    CHECK_EQ_U64(1, machine.cpu.cycles);
+    CHECK_EQ_U16(UINT16_C(0x000A), machine.cpu.flags);
+}
+
+static void test_register_program_runs_until_halt(void)
+{
+    M16Machine machine;
+    m16_machine_power_on(&machine);
+    m16_bus_write(&machine.bus,
+                  UINT16_C(0x8000),
+                  m16_instruction_encode(M16_OPCODE_LDI, m16_operand_encode_destination(M16_R2)));
+    m16_bus_write(&machine.bus, UINT16_C(0x8001), UINT16_C(0xBEEF));
+    m16_bus_write(
+        &machine.bus,
+        UINT16_C(0x8002),
+        m16_instruction_encode(M16_OPCODE_MOV, m16_operand_encode_registers(M16_R5, M16_R2)));
+    m16_bus_write(&machine.bus, UINT16_C(0x8003), m16_instruction_encode(M16_OPCODE_HALT, 0));
+    M16StepResult result;
+    do {
+        result = m16_machine_step(&machine);
+    } while (result == M16_STEP_OK);
+    CHECK_EQ_INT(M16_STEP_HALTED, result);
+    CHECK_EQ_U16(UINT16_C(0xBEEF), machine.cpu.r[2]);
+    CHECK_EQ_U16(UINT16_C(0xBEEF), machine.cpu.r[5]);
+    CHECK_EQ_U16(UINT16_C(0x8004), machine.cpu.pc);
+    CHECK_EQ_U64(3, machine.cpu.cycles);
+    CHECK_TRUE(machine.cpu.halted);
+}
+
+static void test_ldi_rejects_reserved_bits(void)
+{
+    M16Machine machine;
+    m16_machine_power_on(&machine);
+    machine.cpu.r[2] = UINT16_C(0x1234);
+    machine.cpu.flags = UINT16_C(0x0005);
+    m16_bus_write(&machine.bus, M16_RESET_ADDRESS, UINT16_C(0x0221));
+    m16_bus_write(&machine.bus, UINT16_C(0x8001), UINT16_C(0xBEEF));
+    const M16StepResult result = m16_machine_step(&machine);
+    CHECK_EQ_INT(M16_STEP_ILLEGAL_INSTRUCTION, result);
+    CHECK_EQ_U16(UINT16_C(0x1234), machine.cpu.r[2]);
+    CHECK_EQ_U16(M16_RESET_ADDRESS, machine.cpu.pc);
+    CHECK_EQ_U64(0, machine.cpu.cycles);
+    CHECK_EQ_U16(UINT16_C(0x0005), machine.cpu.flags);
+    CHECK_FALSE(machine.cpu.halted);
+}
+
+static void test_mov_rejects_invalid_register(void)
+{
+    M16Machine machine;
+    m16_machine_power_on(&machine);
+    machine.cpu.r[0] = UINT16_C(0x1111);
+    machine.cpu.flags = UINT16_C(0x0003);
+    /*
+     * 0x0380:
+     * opcode = 0x03, MOV
+     * destination = 0x8, invalid
+     * source = 0x0, R0
+     */
+    m16_bus_write(&machine.bus, M16_RESET_ADDRESS, UINT16_C(0x0380));
+    const M16StepResult result = m16_machine_step(&machine);
+    CHECK_EQ_INT(M16_STEP_ILLEGAL_INSTRUCTION, result);
+    CHECK_EQ_U16(UINT16_C(0x1111), machine.cpu.r[0]);
+    CHECK_EQ_U16(M16_RESET_ADDRESS, machine.cpu.pc);
+    CHECK_EQ_U64(0, machine.cpu.cycles);
+    CHECK_EQ_U16(UINT16_C(0x0003), machine.cpu.flags);
+}
+
+static void test_ldi_wraps_across_address_space(void)
+{
+    M16Machine machine;
+
+    m16_machine_power_on(&machine);
+
+    machine.cpu.pc = UINT16_C(0xFFFF);
+
+    m16_bus_write(&machine.bus,
+                  UINT16_C(0xFFFF),
+                  m16_instruction_encode(M16_OPCODE_LDI, m16_operand_encode_destination(M16_R1)));
+
+    m16_bus_write(&machine.bus, UINT16_C(0x0000), UINT16_C(0xCAFE));
+
+    const M16StepResult result = m16_machine_step(&machine);
+
+    CHECK_EQ_INT(M16_STEP_OK, result);
+
+    CHECK_EQ_U16(UINT16_C(0xCAFE), machine.cpu.r[1]);
+
+    CHECK_EQ_U16(UINT16_C(0x0001), machine.cpu.pc);
+
+    CHECK_EQ_U64(1, machine.cpu.cycles);
+}
+
 static void run_test(const char *name, void (*test_function)(void))
 {
     ++tests_run;
@@ -299,6 +436,20 @@ int main(void)
     run_test("illegal instruction preserves state", test_illegal_instruction_preserves_cpu_state);
 
     run_test("program counter wraps after FFFF", test_program_counter_wraps_after_ffff);
+
+    run_test("register operand encoding", test_register_operand_encoding);
+
+    run_test("LDI loads immediate value", test_ldi_loads_immediate_value);
+
+    run_test("MOV copies register", test_mov_copies_register);
+
+    run_test("register program runs until HALT", test_register_program_runs_until_halt);
+
+    run_test("LDI rejects reserved bits", test_ldi_rejects_reserved_bits);
+
+    run_test("MOV rejects invalid register", test_mov_rejects_invalid_register);
+
+    run_test("LDI wraps across address space", test_ldi_wraps_across_address_space);
 
     printf("\n%u tests, %u failed\n", tests_run, tests_failed);
 
