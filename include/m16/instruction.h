@@ -11,6 +11,10 @@ typedef enum {
     M16_OPCODE_HALT = 0x01,
     M16_OPCODE_LDI = 0x02,
     M16_OPCODE_MOV = 0x03,
+    M16_OPCODE_ADD = 0x04,
+    M16_OPCODE_SUB = 0x05,
+    M16_OPCODE_INC = 0x06,
+    M16_OPCODE_DEC = 0x07,
 } M16Opcode;
 
 typedef enum {

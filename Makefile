@@ -10,7 +10,8 @@ TARGET := $(BUILD_DIR)/test_machine
 CORE_SOURCES := \
 	src/cpu.c \
 	src/bus.c \
-	src/machine.c
+	src/machine.c \
+	src/alu.c
 
 TEST_SOURCES := tests/test_main.c
 
